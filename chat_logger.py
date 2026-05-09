@@ -2,17 +2,15 @@ import os
 import json
 import logging
 import datetime
+import shutil # Aggiunto per pulizia cartelle
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# Directory where chat logs will be stored
-# In Docker, this is mapped to your host machine via the 'volumes' setting
 CHATS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chats")
 
-
 class ChatLogger:
-    """Handles recording and retrieving user conversations."""
+    """Handles recording, retrieving, and deleting user conversations."""
 
     def __init__(self):
         self._ensure_dir()
@@ -57,6 +55,29 @@ class ChatLogger:
             logger.error(f"Error logging message: {e}")
             return False
 
+    def delete_log(self, chat_id: int):
+        """Deletes the specific log file for a chat/user."""
+        try:
+            chat_file = os.path.join(CHATS_DIR, f"chat_{chat_id}.json")
+            if os.path.exists(chat_file):
+                os.remove(chat_file)
+                logger.info(f"File di log eliminato: {chat_file}")
+                return True
+        except Exception as e:
+            logger.error(f"Errore durante l'eliminazione del file log {chat_id}: {e}")
+        return False
 
-# Create the singleton instance that main.py expects to import
+    def delete_all_logs(self):
+        """Wipes all files in the chats directory."""
+        try:
+            for filename in os.listdir(CHATS_DIR):
+                file_path = os.path.join(CHATS_DIR, filename)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+            logger.info("Tutti i log della cartella chats sono stati eliminati.")
+            return True
+        except Exception as e:
+            logger.error(f"Errore durante la pulizia totale della cartella log: {e}")
+            return False
+
 chat_logger = ChatLogger()

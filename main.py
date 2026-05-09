@@ -3,6 +3,7 @@ import logging
 from config import TELEGRAM_TOKEN, BOT_OWNER
 from gemini_handler import GeminiHandler
 from chat_logger import chat_logger
+from config import ADMIN_ID
 
 # Configure logging
 logging.basicConfig(
@@ -16,20 +17,43 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN)
 ai_handler = GeminiHandler()
 
 
+@bot.message_handler(commands=['apistats'])
+def admin_status(message):
+    if str(message.from_user.id) != str(ADMIN_ID):
+        bot.reply_to(message, "Comando disponibile solo per il creatore del bot.")
+        return
+
+    stats = ai_handler.get_stats()
+
+    LIMIT_DAILY_REQUESTS = 500
+    LIMIT_DAILY_TOKENS = 250000
+
+    req_percent = (stats['calls'] / LIMIT_DAILY_REQUESTS) * 100
+    tok_percent = (stats['total_tokens'] / LIMIT_DAILY_TOKENS) * 100
+
+    response = (
+        f"**ToniAI Admin Panel**\n"
+        f"Billing Cycle: {stats['date']} (PT)\n\n"
+        f"**Model:** `{stats['model']}`\n\n"
+        f"**Requests (Today):** {stats['calls']} / {LIMIT_DAILY_REQUESTS} ({req_percent:.1f}%)\n"
+        f"**Tokens (Today):** {stats['total_tokens']} / 250K ({tok_percent:.1f}%)\n"
+        f"  - Input: {stats['prompt_tokens']}\n"
+        f"  - Output: {stats['response_tokens']}\n"
+        "\n_Note: RPM (Requests Per Minute) limit is 15._\n"
+        "_Daily quotas reset at 09:00 AM (Italian Time)._"
+    )
+
+    bot.reply_to(message, response, parse_mode='Markdown')
+
+
 @bot.message_handler(commands=['start'])
 def start_command(message):
     """Send a message when the command /start is issued."""
     user_first_name = message.from_user.first_name
     is_group_chat = message.chat.type in ['group', 'supergroup']
 
-    # In groups, only respond if the command starts with 'toniai' or is a direct mention
-    if is_group_chat:
-        message_text = message.text or ""
-        if not message_text.lower().startswith('toniai') and not message_text.startswith('/start@'):
-            return
-
     welcome_message = (
-        f"Ciao {user_first_name}! 👋\n\n"
+        f"Ciao {user_first_name}!\n\n"
         f"Sono un bot alimentato da intelligenza artificiale (Gemini 2.5 Flash).\n"
         f"Sono stato creato da {BOT_OWNER} su Telegram.\n\n"
     )
@@ -51,17 +75,12 @@ def help_command(message):
     """Send a message when the command /help is issued."""
     is_group_chat = message.chat.type in ['group', 'supergroup']
 
-    if is_group_chat:
-        message_text = message.text or ""
-        if not message_text.lower().startswith('toniai') and not message_text.startswith('/help@'):
-            return
-
-    bot_info = bot.get_me()
     help_message = (
         "Ecco i comandi disponibili:\n\n"
         "/start - Inizia una conversazione\n"
         "/help - Mostra questa lista\n"
-        "/reset - Cancella la cronologia della conversazione\n\n"
+        "/reset - Cancella la cronologia della conversazione\n"
+        "/apistats - Statistiche di consumo API\n\n"
         f"Sviluppato da {BOT_OWNER} su Telegram."
     )
 
@@ -73,17 +92,20 @@ def help_command(message):
 
 @bot.message_handler(commands=['reset'])
 def reset_command(message):
-    """Reset the conversation history for a user."""
-    is_group_chat = message.chat.type in ['group', 'supergroup']
+    """Reset the conversation history for the current chat."""
+    chat_id = message.chat.id
 
-    if is_group_chat:
-        message_text = message.text or ""
-        if not message_text.lower().startswith('toniai') and not message_text.startswith('/reset@'):
-            return
+    # 1. Svuotiamo la memoria in RAM di Gemini per QUESTA chat
+    if chat_id in ai_handler.conversations:
+        del ai_handler.conversations[chat_id]
 
-    user_id = message.from_user.id
-    response = ai_handler.reset_conversation(user_id)
-    bot.reply_to(message, "Memoria cancellata. Iniziamo una nuova conversazione! 🔄")
+    # 2. Eliminiamo il file fisico dalla cartella dei log
+    try:
+        chat_logger.delete_log(chat_id)
+    except AttributeError:
+        pass  # Ignora l'errore se la funzione non è ancora stata creata
+
+    bot.reply_to(message, "Memoria e log cancellati. Iniziamo una nuova conversazione!")
 
 
 @bot.message_handler(func=lambda message: True, content_types=['text'])
@@ -113,11 +135,11 @@ def handle_message(message):
             return
 
     bot.send_chat_action(chat_id, 'typing')
-    logger.info(f"Elaborazione messaggio da utente {user_id}: '{message_text}'")
+    logger.info(f"Elaborazione messaggio da chat {chat_id} (Utente: {first_name})")
 
     try:
         # Generate response using Gemini
-        response = ai_handler.generate_response(user_id, message_text)
+        response = ai_handler.generate_response(chat_id, message_text, first_name)
 
         # Failsafe: if Gemini returns an empty string, don't crash Telegram
         if not response or not response.strip():
@@ -138,6 +160,7 @@ def handle_message(message):
         logger.error(f"Error handling message: {e}")
         bot.reply_to(message,
                      "Scusa, sto avendo problemi a connettermi all'intelligenza artificiale in questo momento. Riprova più tardi.")
+
 
 if __name__ == '__main__':
     logger.info("Starting Telegram bot natively...")

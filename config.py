@@ -9,6 +9,11 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 # Bot owner information
 BOT_OWNER = "@ityttmom"
 
+MODEL_NAME = "gemini-3.1-flash-lite"
+
+ADMIN_ID = 713164389
+
+
 #
 DEFAULT_SYSTEM_MESSAGE = (
     "You are a helpful, direct, and efficient assistant in a Telegram chat. "

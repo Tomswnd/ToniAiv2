@@ -41,15 +41,15 @@ class GeminiHandler:
             self.daily_total_tokens = 0
 
             # Svuota tutte le sessioni dalla RAM
-            self.conversations.clear()
+            # self.conversations.clear()
 
             # Svuota l'intera cartella dei file di log
-            try:
-                chat_logger.delete_all_logs()
-            except AttributeError:
-                pass
+            # try:
+            #     # chat_logger.delete_all_logs()
+            # except AttributeError:
+            #     pass
 
-            logger.info("Reset giornaliero eseguito: quote, memoria e cartella log azzerati.")
+            # logger.info("Reset giornaliero eseguito: quote, memoria e cartella log azzerati.")
 
     def get_conversation(self, chat_id):
         # La chiave ora è l'ID della chat, non dell'utente

@@ -72,19 +72,33 @@ class GeminiHandler:
         self.get_conversation(user_id)
         return "Conversation history has been successfully reset."
 
-    def generate_response(self, chat_id, message_text, user_name):
+    def generate_response(self, chat_id, message_text, user_name, image=None):
         self._check_daily_reset()
 
         # Passiamo il chat_id
         chat_session = self.get_conversation(chat_id)
 
-        # TRUCCO: Inseriamo il nome dell'utente nel messaggio inviato a Gemini
-        # Così il bot saprà sempre "chi" sta parlando nel gruppo.
-        formatted_message = f"[{user_name} dice]: {message_text}"
+        # Build contents list for multimodal input
+        contents = []
+        if image:
+            contents.append(image)
+
+        if message_text:
+            formatted_message = f"[{user_name} dice]: {message_text}"
+            contents.append(formatted_message)
+        elif image:
+            # If user sent a photo without caption, add a context note
+            formatted_message = f"[{user_name} ha inviato un'immagine]"
+            contents.append(formatted_message)
+        else:
+            formatted_message = ""
 
         try:
             logger.info(f"Invio richiesta a Gemini per chat {chat_id} da {user_name}")
-            response = chat_session.send_message(formatted_message)
+            if image:
+                response = chat_session.send_message(contents)
+            else:
+                response = chat_session.send_message(formatted_message)
             self.daily_calls += 1
 
             if response.usage_metadata:

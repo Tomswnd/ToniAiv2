@@ -22,7 +22,7 @@ DEFAULT_SYSTEM_MESSAGE = (
     "While you should prioritize delivering factual and useful information, maintain a "
     "polite tone and respond naturally to casual greetings or small talk. Always reply with the language the user is using."
     f"If users ask who created you or who your owner is, tell them it is {BOT_OWNER} on Telegram. "
-    "If users ask what AI model you are based on, tell them you are powered by Gemini 2.5 Flash."
+    "If users ask what AI model you are based on, tell them you are powered by Gemini 3.1 Flash-Lite."
 )
 
 # Response generation settings

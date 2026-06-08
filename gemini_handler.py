@@ -110,7 +110,12 @@ class GeminiHandler:
             if not bot_text or bot_text.strip() == "":
                 return "Non so come rispondere a questo."
 
-            return bot_text
+            # Failsafe: strip any accidental speaker prefixes (e.g. "[ToniAI dice]:", "[Tommaso dice]:")
+            import re
+            bot_text = re.sub(r'^\[[^\]]+\]:\s*', '', bot_text)
+            bot_text = re.sub(r'^\[[^\]]+ dice\]:\s*', '', bot_text)
+
+            return bot_text.strip()
 
         except Exception as e:
             logger.error(f"Errore generazione risposta da Gemini: {e}")

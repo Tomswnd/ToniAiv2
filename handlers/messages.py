@@ -1,7 +1,6 @@
 import logging
 from handlers import bot, ai_handler, stream_mode
 from handlers.streaming import send_streaming_response
-from chat_logger import chat_logger
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +87,7 @@ def handle_photo(message):
             response = send_streaming_response(message, chat_id, prompt_text, first_name, image=image)
         else:
             # Classic mode
-            response = ai_handler.generate_response(chat_id, prompt_text, first_name, image=image)
+            response = ai_handler.generate_response(chat_id, prompt_text, first_name, user_id=user_id, image=image)
 
             # Failsafe: if Gemini returns empty response
             if not response or not response.strip():
@@ -97,15 +96,6 @@ def handle_photo(message):
 
             bot.reply_to(message, response)
 
-        # Log the conversation locally
-        log_text = f"[Foto] {prompt_text}".strip() if prompt_text else "[Foto]"
-        chat_logger.log_message(
-            user_id=user_id,
-            user_message=log_text,
-            bot_response=response,
-            username=username,
-            first_name=first_name
-        )
     except Exception as e:
         logger.error(f"Error handling photo: {e}")
         bot.reply_to(message, "Scusa, sto avendo problemi a elaborare questa immagine.")
@@ -150,7 +140,7 @@ def handle_message(message):
             response = send_streaming_response(message, chat_id, prompt_text, first_name, image=quoted_image)
         else:
             # Classic mode
-            response = ai_handler.generate_response(chat_id, prompt_text, first_name, image=quoted_image)
+            response = ai_handler.generate_response(chat_id, prompt_text, first_name, user_id=user_id, image=quoted_image)
 
             # Failsafe: if Gemini returns an empty string, don't crash Telegram
             if not response or not response.strip():
@@ -159,14 +149,6 @@ def handle_message(message):
 
             bot.reply_to(message, response)
 
-        # Log the conversation locally
-        chat_logger.log_message(
-            user_id=user_id,
-            user_message=prompt_text,
-            bot_response=response,
-            username=username,
-            first_name=first_name
-        )
     except Exception as e:
         logger.error(f"Error handling message: {e}")
         bot.reply_to(message,

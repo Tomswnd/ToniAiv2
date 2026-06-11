@@ -1,0 +1,12 @@
+# Credentials
+.env
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# IDE files
+.idea/
+
+# Local database
+data/

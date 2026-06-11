@@ -1,7 +1,7 @@
 import logging
 from config import BOT_OWNER, ADMIN_ID
 from handlers import bot, ai_handler, stream_mode
-from chat_logger import chat_logger
+from user_memory import delete_all_user_memories
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,8 @@ def help_command(message):
         "Ecco i comandi disponibili:\n\n"
         "/start - Inizia una conversazione\n"
         "/help - Mostra questa lista\n"
-        "/reset - Cancella la cronologia della conversazione\n"
+        "/reset - Cancella la cronologia della conversazione (RAM)\n"
+        "/forget - Dimentica tutte le informazioni memorizzate su di te (DB)\n"
         "/stream - Attiva/disattiva risposte in tempo reale\n"
         "/apistats - Statistiche di consumo API\n\n"
         f"Sviluppato da {BOT_OWNER} su Telegram."
@@ -99,14 +100,22 @@ def reset_command(message):
     """Reset the conversation history for the current chat."""
     chat_id = message.chat.id
 
-    # 1. Svuotiamo la memoria in RAM di Gemini per QUESTA chat
+    # Svuotiamo la memoria in RAM di Gemini per QUESTA chat
     if chat_id in ai_handler.conversations:
         del ai_handler.conversations[chat_id]
 
-    # 2. Eliminiamo il file fisico dalla cartella dei log
-    try:
-        chat_logger.delete_log(chat_id)
-    except AttributeError:
-        pass  # Ignora l'errore se la funzione non è ancora stata creata
+    bot.reply_to(message, "Memoria della chat (RAM) cancellata. Iniziamo una nuova conversazione!")
 
-    bot.reply_to(message, "Memoria e log cancellati. Iniziamo una nuova conversazione!")
+
+@bot.message_handler(commands=['forget'])
+def forget_command(message):
+    """Delete all stored user memories for the sender."""
+    user_id = message.from_user.id
+    deleted_count = delete_all_user_memories(user_id)
+    if deleted_count > 0:
+        bot.reply_to(
+            message,
+            f"Ho dimenticato tutte le informazioni memorizzate su di te ({deleted_count} ricordi rimossi)."
+        )
+    else:
+        bot.reply_to(message, "Non ho alcuna informazione memorizzata su di te.")

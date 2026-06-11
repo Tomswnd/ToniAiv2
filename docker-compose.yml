@@ -8,5 +8,4 @@ services:
     env_file:
       - .env
     volumes:
-      # This saves your chat logs safely on the host machine
-      - ./chats:/app/chats
+      - ./data:/app/data

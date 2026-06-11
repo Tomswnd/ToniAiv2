@@ -4,9 +4,15 @@ import zoneinfo
 from google import genai
 from google.genai import types
 import datetime
-from chat_logger import chat_logger
 
 from config import GEMINI_API_KEY, DEFAULT_SYSTEM_MESSAGE, TEMPERATURE, MODEL_NAME
+from user_memory import (
+    save_user_memory,
+    get_user_memories,
+    save_group_memory,
+    get_group_memories,
+    delete_memory
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,17 +92,6 @@ class GeminiHandler:
             self.daily_response_tokens = 0
             self.daily_total_tokens = 0
 
-            # Svuota tutte le sessioni dalla RAM
-            # self.conversations.clear()
-
-            # Svuota l'intera cartella dei file di log
-            # try:
-            #     # chat_logger.delete_all_logs()
-            # except AttributeError:
-            #     pass
-
-            # logger.info("Reset giornaliero eseguito: quote, memoria e cartella log azzerati.")
-
     def get_conversation(self, chat_id):
         # La chiave ora è l'ID della chat, non dell'utente
         if chat_id not in self.conversations:
@@ -106,7 +101,14 @@ class GeminiHandler:
                 config=types.GenerateContentConfig(
                     system_instruction=DEFAULT_SYSTEM_MESSAGE,
                     temperature=TEMPERATURE,
-                    tools=[search_web]
+                    tools=[
+                        search_web,
+                        save_user_memory,
+                        get_user_memories,
+                        save_group_memory,
+                        get_group_memories,
+                        delete_memory
+                    ]
                 )
             )
         return self.conversations[chat_id]
@@ -119,7 +121,7 @@ class GeminiHandler:
         self.get_conversation(user_id)
         return "Conversation history has been successfully reset."
 
-    def generate_response(self, chat_id, message_text, user_name, image=None):
+    def generate_response(self, chat_id, message_text, user_name, user_id=None, image=None):
         self._check_daily_reset()
 
         # Passiamo il chat_id
@@ -132,12 +134,16 @@ class GeminiHandler:
 
         time_context = get_current_time_context()
 
+        # Format user label with user ID and chat ID so Gemini knows the IDs contextually
+        user_info = f"{user_name} (ID: {user_id})" if user_id is not None else user_name
+        chat_info = f" nella chat {chat_id}" if chat_id is not None else ""
+
         if message_text:
-            formatted_message = f"{time_context}[{user_name} dice]: {message_text}"
+            formatted_message = f"{time_context}[{user_info} dice{chat_info}]: {message_text}"
             contents.append(formatted_message)
         elif image:
             # If user sent a photo without caption, add a context note
-            formatted_message = f"{time_context}[{user_name} ha inviato un'immagine]"
+            formatted_message = f"{time_context}[{user_info} ha inviato un'immagine{chat_info}]"
             contents.append(formatted_message)
         else:
             formatted_message = ""
@@ -170,7 +176,7 @@ class GeminiHandler:
             logger.error(f"Errore generazione risposta da Gemini: {e}")
             return "Scusa, ho avuto un problema tecnico con l'IA."
 
-    def generate_response_stream(self, chat_id, message_text, user_name, image=None):
+    def generate_response_stream(self, chat_id, message_text, user_name, user_id=None, image=None):
         """Generator that yields accumulated response text as it streams from Gemini."""
         self._check_daily_reset()
 
@@ -183,11 +189,15 @@ class GeminiHandler:
 
         time_context = get_current_time_context()
 
+        # Format user label with user ID and chat ID so Gemini knows the IDs contextually
+        user_info = f"{user_name} (ID: {user_id})" if user_id is not None else user_name
+        chat_info = f" nella chat {chat_id}" if chat_id is not None else ""
+
         if message_text:
-            formatted_message = f"{time_context}[{user_name} dice]: {message_text}"
+            formatted_message = f"{time_context}[{user_info} dice{chat_info}]: {message_text}"
             contents.append(formatted_message)
         elif image:
-            formatted_message = f"{time_context}[{user_name} ha inviato un'immagine]"
+            formatted_message = f"{time_context}[{user_info} ha inviato un'immagine{chat_info}]"
             contents.append(formatted_message)
         else:
             formatted_message = ""

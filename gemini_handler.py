@@ -204,23 +204,81 @@ class GeminiHandler:
 
         try:
             logger.info(f"Invio richiesta streaming a Gemini per chat {chat_id} da {user_name}")
-            if image:
-                stream = chat_session.send_message_stream(contents)
-            else:
-                stream = chat_session.send_message_stream(formatted_message)
 
-            self.daily_calls += 1
+            # Use request-specific config to disable automatic function calling so we can manually resolve the flow in a stream
+            stream_config = types.GenerateContentConfig(
+                system_instruction=DEFAULT_SYSTEM_MESSAGE,
+                temperature=TEMPERATURE,
+                tools=[
+                    search_web,
+                    save_user_memory,
+                    get_user_memories,
+                    save_group_memory,
+                    get_group_memories,
+                    delete_memory
+                ],
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
+            )
+
+            message_to_send = contents if image else formatted_message
             accumulated_text = ""
             last_usage = None
 
-            for chunk in stream:
-                if chunk.text:
-                    accumulated_text += chunk.text
-                    yield accumulated_text
-                if chunk.usage_metadata:
-                    last_usage = chunk.usage_metadata
+            while True:
+                stream = chat_session.send_message_stream(message_to_send, config=stream_config)
+                self.daily_calls += 1
 
-            # Track usage from the final metadata only (to avoid double-counting)
+                function_calls_to_resolve = []
+                for chunk in stream:
+                    if chunk.function_calls:
+                        function_calls_to_resolve.extend(chunk.function_calls)
+                    if chunk.text:
+                        accumulated_text += chunk.text
+                        yield accumulated_text
+                    if chunk.usage_metadata:
+                        last_usage = chunk.usage_metadata
+
+                if not function_calls_to_resolve:
+                    # No more function calls, we are done
+                    break
+
+                # Resolve all function calls returned in this turn
+                tool_parts = []
+                for call in function_calls_to_resolve:
+                    func_name = call.name
+                    func_args = call.args
+                    logger.info(f"Rilevato Function Call in stream (manuale): {func_name} con argomenti {func_args}")
+
+                    try:
+                        if func_name == "search_web":
+                            res = search_web(**func_args)
+                        elif func_name == "save_user_memory":
+                            res = save_user_memory(**func_args)
+                        elif func_name == "get_user_memories":
+                            res = get_user_memories(**func_args)
+                        elif func_name == "save_group_memory":
+                            res = save_group_memory(**func_args)
+                        elif func_name == "get_group_memories":
+                            res = get_group_memories(**func_args)
+                        elif func_name == "delete_memory":
+                            res = delete_memory(**func_args)
+                        else:
+                            res = f"Errore: funzione {func_name} sconosciuta."
+                    except Exception as ex:
+                        logger.error(f"Errore esecuzione manuale tool {func_name}: {ex}")
+                        res = f"Errore esecuzione tool: {ex}"
+
+                    tool_parts.append(
+                        types.Part.from_function_response(
+                            name=func_name,
+                            response={"result": res}
+                        )
+                    )
+
+                # Set the tool response as the message for the next iteration of the stream
+                message_to_send = types.Content(role="tool", parts=tool_parts)
+
+            # Track usage from the final metadata
             if last_usage:
                 self.daily_prompt_tokens += getattr(last_usage, 'prompt_token_count', 0) or 0
                 self.daily_response_tokens += getattr(last_usage, 'candidates_token_count', 0) or 0

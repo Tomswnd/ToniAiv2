@@ -30,7 +30,7 @@ def send_streaming_response(message, chat_id, prompt_text, first_name, image=Non
 
     try:
         for accumulated_text in ai_handler.generate_response_stream(
-            chat_id, prompt_text, first_name, image=image
+            chat_id, prompt_text, first_name, user_id=message.from_user.id, image=image
         ):
             final_text = accumulated_text
             now = time.time()

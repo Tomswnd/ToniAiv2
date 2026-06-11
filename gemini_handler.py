@@ -121,6 +121,57 @@ class GeminiHandler:
             logger.error(f"Errore generazione risposta da Gemini: {e}")
             return "Scusa, ho avuto un problema tecnico con l'IA."
 
+    def generate_response_stream(self, chat_id, message_text, user_name, image=None):
+        """Generator that yields accumulated response text as it streams from Gemini."""
+        self._check_daily_reset()
+
+        chat_session = self.get_conversation(chat_id)
+
+        # Build contents list for multimodal input
+        contents = []
+        if image:
+            contents.append(image)
+
+        if message_text:
+            formatted_message = f"[{user_name} dice]: {message_text}"
+            contents.append(formatted_message)
+        elif image:
+            formatted_message = f"[{user_name} ha inviato un'immagine]"
+            contents.append(formatted_message)
+        else:
+            formatted_message = ""
+
+        try:
+            logger.info(f"Invio richiesta streaming a Gemini per chat {chat_id} da {user_name}")
+            if image:
+                stream = chat_session.send_message_stream(contents)
+            else:
+                stream = chat_session.send_message_stream(formatted_message)
+
+            self.daily_calls += 1
+            accumulated_text = ""
+            last_usage = None
+
+            for chunk in stream:
+                if chunk.text:
+                    accumulated_text += chunk.text
+                    yield accumulated_text
+                if chunk.usage_metadata:
+                    last_usage = chunk.usage_metadata
+
+            # Track usage from the final metadata only (to avoid double-counting)
+            if last_usage:
+                self.daily_prompt_tokens += getattr(last_usage, 'prompt_token_count', 0) or 0
+                self.daily_response_tokens += getattr(last_usage, 'candidates_token_count', 0) or 0
+                self.daily_total_tokens += getattr(last_usage, 'total_token_count', 0) or 0
+
+            if not accumulated_text.strip():
+                yield "Non so come rispondere a questo."
+
+        except Exception as e:
+            logger.error(f"Errore generazione risposta streaming da Gemini: {e}")
+            yield "Scusa, ho avuto un problema tecnico con l'IA."
+
     def get_stats(self):
         self._check_daily_reset()
         return {

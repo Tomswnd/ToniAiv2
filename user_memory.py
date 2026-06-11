@@ -22,6 +22,14 @@ def init_db():
             );
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope, scope_id);")
+        
+        # Migration: Add group_id column if not exists
+        try:
+            cursor.execute("ALTER TABLE memories ADD COLUMN group_id INTEGER;")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_group ON memories(group_id);")
+        except sqlite3.OperationalError:
+            pass
+
         conn.commit()
     finally:
         conn.close()
@@ -31,20 +39,21 @@ def init_db():
 init_db()
 
 
-def save_user_memory(user_id: int, category: str, content: str) -> str:
+def save_user_memory(user_id: int, category: str, content: str, group_id: int = None) -> str:
     """Saves a notable memory or fact about a specific user.
 
     Args:
         user_id: The unique numeric ID of the user (e.g. 713164389).
         category: The category of the memory (e.g. 'preference', 'personal', 'interest', 'gag').
         content: The actual fact or memory to save (e.g. 'Colore preferito: blu', 'Studia informatica a Padova').
+        group_id: Optional unique numeric ID of the group/chat where this memory was learned. Pass this if you are in a group chat.
     """
     conn = sqlite3.connect(DB_PATH)
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO memories (scope, scope_id, category, content) VALUES (?, ?, ?, ?)",
-            ("user", int(user_id), category.strip(), content.strip())
+            "INSERT INTO memories (scope, scope_id, category, content, group_id) VALUES (?, ?, ?, ?, ?)",
+            ("user", int(user_id), category.strip(), content.strip(), int(group_id) if group_id is not None else None)
         )
         conn.commit()
         return f"Successfully saved user memory (ID: {cursor.lastrowid}) for user {user_id}."
@@ -115,8 +124,8 @@ def get_group_memories(chat_id: int) -> str:
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, category, content, created_at FROM memories WHERE scope = ? AND scope_id = ? ORDER BY created_at DESC",
-            ("group", int(chat_id))
+            "SELECT id, scope, scope_id, category, content, created_at FROM memories WHERE (scope = ? AND scope_id = ?) OR (group_id = ?) ORDER BY created_at DESC",
+            ("group", int(chat_id), int(chat_id))
         )
         rows = cursor.fetchall()
         if not rows:
@@ -124,8 +133,11 @@ def get_group_memories(chat_id: int) -> str:
 
         memories_list = []
         for row in rows:
-            mem_id, category, content, created_at = row
-            memories_list.append(f"- [ID: {mem_id}] [{category}] {content} (saved at {created_at})")
+            mem_id, scope, scope_id, category, content, created_at = row
+            if scope == "group":
+                memories_list.append(f"- [ID: {mem_id}] [Group] [{category}] {content} (saved at {created_at})")
+            else:
+                memories_list.append(f"- [ID: {mem_id}] [User {scope_id}] [{category}] {content} (saved at {created_at})")
         return f"Memories for chat {chat_id}:\n" + "\n".join(memories_list)
     except Exception as e:
         return f"Error retrieving group memories: {e}"

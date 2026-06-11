@@ -1,6 +1,6 @@
 import logging
 from config import BOT_OWNER, ADMIN_ID
-from handlers import bot, ai_handler, stream_mode
+from handlers import bot, ai_handler
 from user_memory import delete_all_user_memories
 
 logger = logging.getLogger(__name__)
@@ -60,19 +60,6 @@ def start_command(message):
     bot.reply_to(message, welcome_message)
 
 
-@bot.message_handler(commands=['stream'])
-def stream_command(message):
-    """Toggle streaming mode for the current chat."""
-    chat_id = message.chat.id
-    current = stream_mode.get(chat_id, False)
-    stream_mode[chat_id] = not current
-
-    if stream_mode[chat_id]:
-        bot.reply_to(message, "✅ Modalità streaming attivata!\nLe risposte verranno mostrate in tempo reale.")
-    else:
-        bot.reply_to(message, "❌ Modalità streaming disattivata.\nLe risposte verranno inviate complete.")
-
-
 @bot.message_handler(commands=['help'])
 def help_command(message):
     """Send a message when the command /help is issued."""
@@ -84,7 +71,6 @@ def help_command(message):
         "/help - Mostra questa lista\n"
         "/reset - Cancella la cronologia della conversazione (RAM)\n"
         "/forget - Dimentica tutte le informazioni memorizzate su di te (DB)\n"
-        "/stream - Attiva/disattiva risposte in tempo reale\n"
         "/apistats - Statistiche di consumo API\n\n"
         f"Sviluppato da {BOT_OWNER} su Telegram."
     )

@@ -1,6 +1,5 @@
 import logging
-from handlers import bot, ai_handler, stream_mode
-from handlers.streaming import send_streaming_response
+from handlers import bot, ai_handler
 
 logger = logging.getLogger(__name__)
 
@@ -82,19 +81,15 @@ def handle_photo(message):
         context_text, _ = get_reply_context(message)
         prompt_text = context_text + caption_text
 
-        # Choose streaming or classic mode
-        if stream_mode.get(chat_id, False):
-            response = send_streaming_response(message, chat_id, prompt_text, first_name, image=image)
-        else:
-            # Classic mode
-            response = ai_handler.generate_response(chat_id, prompt_text, first_name, user_id=user_id, image=image)
+        # Classic mode
+        response = ai_handler.generate_response(chat_id, prompt_text, first_name, user_id=user_id, image=image)
 
-            # Failsafe: if Gemini returns empty response
-            if not response or not response.strip():
-                logger.warning("Gemini returned an empty response for photo.")
-                response = "Scusa, non sono riuscito a elaborare una risposta."
+        # Failsafe: if Gemini returns empty response
+        if not response or not response.strip():
+            logger.warning("Gemini returned an empty response for photo.")
+            response = "Scusa, non sono riuscito a elaborare una risposta."
 
-            bot.reply_to(message, response)
+        bot.reply_to(message, response)
 
     except Exception as e:
         logger.error(f"Error handling photo: {e}")
@@ -135,19 +130,15 @@ def handle_message(message):
         context_text, quoted_image = get_reply_context(message)
         prompt_text = context_text + message_text
 
-        # Choose streaming or classic mode
-        if stream_mode.get(chat_id, False):
-            response = send_streaming_response(message, chat_id, prompt_text, first_name, image=quoted_image)
-        else:
-            # Classic mode
-            response = ai_handler.generate_response(chat_id, prompt_text, first_name, user_id=user_id, image=quoted_image)
+        # Classic mode
+        response = ai_handler.generate_response(chat_id, prompt_text, first_name, user_id=user_id, image=quoted_image)
 
-            # Failsafe: if Gemini returns an empty string, don't crash Telegram
-            if not response or not response.strip():
-                logger.warning("Gemini returned an empty response.")
-                response = "Scusa, non sono riuscito a elaborare una risposta."
+        # Failsafe: if Gemini returns an empty string, don't crash Telegram
+        if not response or not response.strip():
+            logger.warning("Gemini returned an empty response.")
+            response = "Scusa, non sono riuscito a elaborare una risposta."
 
-            bot.reply_to(message, response)
+        bot.reply_to(message, response)
 
     except Exception as e:
         logger.error(f"Error handling message: {e}")

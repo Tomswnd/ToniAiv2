@@ -11,6 +11,52 @@ from config import GEMINI_API_KEY, DEFAULT_SYSTEM_MESSAGE, TEMPERATURE, MODEL_NA
 logger = logging.getLogger(__name__)
 
 
+def search_web(query: str) -> str:
+    """Searches the web for the given query using DuckDuckGo and returns a summary of the results.
+
+    Args:
+        query: The search query to look up on the web.
+    """
+    from duckduckgo_search import DDGS
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Esecuzione ricerca web gratuita per: {query}")
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=3))
+            if not results:
+                return "Nessun risultato trovato sul web."
+            
+            output = []
+            for r in results:
+                title = r.get('title', 'Nessun titolo')
+                link = r.get('href', '')
+                body = r.get('body', 'Nessuna descrizione')
+                output.append(f"Titolo: {title}\nLink: {link}\nDescrizione: {body}\n")
+            return "\n---\n".join(output)
+    except Exception as e:
+        logger.error(f"Errore durante la ricerca DuckDuckGo: {e}")
+        return f"Impossibile completare la ricerca per errore tecnico: {str(e)}"
+
+
+def get_current_time_context() -> str:
+    """Returns a formatted string representing the current date, time, and timezone context."""
+    import datetime
+    now = datetime.datetime.now().astimezone()
+    tz_name = now.tzname() or ""
+    offset = now.strftime("%z")
+    
+    # Format timezone offset from e.g. +0200 to UTC+02:00
+    if len(offset) == 5:
+        offset_formatted = f"UTC{offset[:3]}:{offset[3:]}"
+    else:
+        offset_formatted = "UTC"
+        
+    tz_info = f"{tz_name}, {offset_formatted}" if tz_name else offset_formatted
+    current_time = now.strftime("%d/%m/%Y %H:%M")
+    return f"[Data/Ora Corrente: {current_time} ({tz_info})]\n"
+
+
 class GeminiHandler:
     def __init__(self):
         if not GEMINI_API_KEY:
@@ -60,6 +106,7 @@ class GeminiHandler:
                 config=types.GenerateContentConfig(
                     system_instruction=DEFAULT_SYSTEM_MESSAGE,
                     temperature=TEMPERATURE,
+                    tools=[search_web]
                 )
             )
         return self.conversations[chat_id]
@@ -83,12 +130,14 @@ class GeminiHandler:
         if image:
             contents.append(image)
 
+        time_context = get_current_time_context()
+
         if message_text:
-            formatted_message = f"[{user_name} dice]: {message_text}"
+            formatted_message = f"{time_context}[{user_name} dice]: {message_text}"
             contents.append(formatted_message)
         elif image:
             # If user sent a photo without caption, add a context note
-            formatted_message = f"[{user_name} ha inviato un'immagine]"
+            formatted_message = f"{time_context}[{user_name} ha inviato un'immagine]"
             contents.append(formatted_message)
         else:
             formatted_message = ""
@@ -132,11 +181,13 @@ class GeminiHandler:
         if image:
             contents.append(image)
 
+        time_context = get_current_time_context()
+
         if message_text:
-            formatted_message = f"[{user_name} dice]: {message_text}"
+            formatted_message = f"{time_context}[{user_name} dice]: {message_text}"
             contents.append(formatted_message)
         elif image:
-            formatted_message = f"[{user_name} ha inviato un'immagine]"
+            formatted_message = f"{time_context}[{user_name} ha inviato un'immagine]"
             contents.append(formatted_message)
         else:
             formatted_message = ""

@@ -20,9 +20,17 @@ def search_web(query: str) -> str:
     """Searches the web for the given query using DuckDuckGo and returns a summary of the results."""
     logger.info(f"Esecuzione ricerca web per: '{query}'")
     from duckduckgo_search import DDGS
-    try:
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError
+
+    def _do_search():
         with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=3))
+            return list(ddgs.text(query, max_results=3))
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_do_search)
+            results = future.result(timeout=3)
+
             if not results:
                 return "Nessun risultato trovato sul web."
             
@@ -33,6 +41,9 @@ def search_web(query: str) -> str:
                 body = r.get('body', 'Nessuna descrizione')
                 output.append(f"Titolo: {title}\nLink: {link}\nDescrizione: {body}\n")
             return "\n---\n".join(output)
+    except TimeoutError:
+        logger.warning(f"Ricerca web per '{query}' scaduta dopo 3 secondi")
+        return "La ricerca web ha impiegato troppo tempo ed è stata annullata."
     except Exception as e:
         logger.error(f"Errore durante la ricerca DuckDuckGo: {e}")
         return f"Impossibile completare la ricerca per errore tecnico: {str(e)}"

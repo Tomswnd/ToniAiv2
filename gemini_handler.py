@@ -99,7 +99,7 @@ class GeminiHandler:
                     temperature=TEMPERATURE,
                     tools=[search_web],
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                        maximum_remote_calls=1
+                        maximum_remote_calls=2
                     )
                 )
             )

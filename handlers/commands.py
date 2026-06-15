@@ -2,6 +2,7 @@ import logging
 from config import BOT_OWNER, ADMIN_ID
 from handlers import bot, ai_handler
 from user_memory import delete_all_user_memories
+from daily_reset import reset_single_chat, is_notify_enabled, set_notify
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +70,9 @@ def help_command(message):
         "Ecco i comandi disponibili:\n\n"
         "/start - Inizia una conversazione\n"
         "/help - Mostra questa lista\n"
-        "/reset - Cancella la cronologia della conversazione (RAM)\n"
+        "/reset - Salva resoconto personaggi e resetta la conversazione\n"
         "/forget - Dimentica tutte le informazioni memorizzate su di te (DB)\n"
+        "/togglenotify - Attiva/disattiva notifiche di reset (admin)\n"
         "/apistats - Statistiche di consumo API\n\n"
         f"Sviluppato da {BOT_OWNER} su Telegram."
     )
@@ -83,14 +85,40 @@ def help_command(message):
 
 @bot.message_handler(commands=['reset'])
 def reset_command(message):
-    """Reset the conversation history for the current chat."""
+    """Generate a character summary, save it, optionally notify, then reset the conversation."""
     chat_id = message.chat.id
 
-    # Svuotiamo la memoria in RAM di Gemini per QUESTA chat
-    if chat_id in ai_handler.conversations:
-        del ai_handler.conversations[chat_id]
+    if chat_id not in ai_handler.conversations:
+        bot.reply_to(message, "Non c'è nessuna conversazione attiva da resettare.")
+        return
 
-    bot.reply_to(message, "Memoria della chat (RAM) cancellata. Iniziamo una nuova conversazione!")
+    bot.send_chat_action(chat_id, 'typing')
+
+    try:
+        summary = reset_single_chat(chat_id, ai_handler, bot)
+        if summary:
+            bot.reply_to(message, "🔄 Resoconto personaggi salvato e conversazione resettata!")
+        else:
+            bot.reply_to(message, "🔄 Conversazione resettata (nessun resoconto generato).")
+    except Exception as e:
+        logger.error(f"Error during manual reset for chat {chat_id}: {e}")
+        # Fallback: force-delete anyway
+        if chat_id in ai_handler.conversations:
+            del ai_handler.conversations[chat_id]
+        bot.reply_to(message, "🔄 Conversazione resettata (errore durante il salvataggio del resoconto).")
+
+
+@bot.message_handler(commands=['togglenotify'])
+def toggle_notify_command(message):
+    """Toggle daily-reset notifications on/off (admin only)."""
+    if str(message.from_user.id) != str(ADMIN_ID):
+        bot.reply_to(message, "Comando disponibile solo per il creatore del bot.")
+        return
+
+    current = is_notify_enabled()
+    set_notify(not current)
+    new_state = "attivate ✅" if not current else "disattivate ❌"
+    bot.reply_to(message, f"Notifiche di reset giornaliero: {new_state}")
 
 
 @bot.message_handler(commands=['forget'])

@@ -41,3 +41,7 @@ DEFAULT_SYSTEM_MESSAGE = (
 
 # Response generation settings
 TEMPERATURE = 0.7
+
+# Daily reset settings
+DAILY_RESET_TIME = os.environ.get("DAILY_RESET_TIME", "04:00")
+DAILY_RESET_NOTIFY = os.environ.get("DAILY_RESET_NOTIFY", "true").lower() == "true"

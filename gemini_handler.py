@@ -96,6 +96,12 @@ class GeminiHandler:
             if "No memories found" not in memories_raw and "Error" not in memories_raw:
                 system_instruction += f"\n\n[MEMORIE SALVATE IN PRECEDENZA PER QUESTA CHAT]:\n{memories_raw}\n"
 
+            # Carica il resoconto giornaliero (profili personaggi) se disponibile
+            from daily_reset import load_latest_summary
+            daily_summary = load_latest_summary(chat_id)
+            if daily_summary:
+                system_instruction += f"\n\n{daily_summary}\n"
+
             self.conversations[chat_id] = self.client.chats.create(
                 model=self.model_name,
                 config=types.GenerateContentConfig(

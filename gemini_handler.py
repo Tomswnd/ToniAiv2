@@ -166,6 +166,8 @@ class GeminiHandler:
             import re
             bot_text = re.sub(r'^\[[^\]]+\]:\s*', '', bot_text)
             bot_text = re.sub(r'^\[[^\]]+ dice\]:\s*', '', bot_text)
+            # Strip leaked function calls (e.g. @save_user_memory(...))
+            bot_text = re.sub(r'@?\w+\([^)]*\)\s*', '', bot_text)
             return bot_text.strip()
 
         except Exception as e:

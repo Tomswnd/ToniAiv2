@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 from google import genai
 from google.genai import types
 import datetime
@@ -18,20 +19,15 @@ logger = logging.getLogger(__name__)
 
 def search_web(query: str) -> str:
     """Searches the web for the given query using DuckDuckGo and returns a summary of the results."""
-    logger.info(f"Esecuzione ricerca web per: '{query}'")
+    start = time.time()
+    logger.info(f"[TOOL] search_web called with query: '{query}'")
     from duckduckgo_search import DDGS
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError
-
-    def _do_search():
-        with DDGS() as ddgs:
-            return list(ddgs.text(query, max_results=3))
-
     try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_do_search)
-            results = future.result(timeout=3)
-
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=3))
             if not results:
+                elapsed = time.time() - start
+                logger.info(f"[TOOL] search_web completed in {elapsed:.2f}s (no results)")
                 return "Nessun risultato trovato sul web."
             
             output = []
@@ -40,12 +36,12 @@ def search_web(query: str) -> str:
                 link = r.get('href', '')
                 body = r.get('body', 'Nessuna descrizione')
                 output.append(f"Titolo: {title}\nLink: {link}\nDescrizione: {body}\n")
+            elapsed = time.time() - start
+            logger.info(f"[TOOL] search_web completed in {elapsed:.2f}s ({len(results)} results)")
             return "\n---\n".join(output)
-    except TimeoutError:
-        logger.warning(f"Ricerca web per '{query}' scaduta dopo 3 secondi")
-        return "La ricerca web ha impiegato troppo tempo ed è stata annullata."
     except Exception as e:
-        logger.error(f"Errore durante la ricerca DuckDuckGo: {e}")
+        elapsed = time.time() - start
+        logger.error(f"[TOOL] search_web FAILED in {elapsed:.2f}s: {e}")
         return f"Impossibile completare la ricerca per errore tecnico: {str(e)}"
 
 
@@ -149,14 +145,27 @@ class GeminiHandler:
             contents.append(f"{time_context}[{user_info} ha inviato un'immagine{chat_info}]")
 
         try:
-            logger.info(f"Invio richiesta a Gemini per chat {chat_id} da {user_name}")
+            history_len = len(chat_session._history) if hasattr(chat_session, '_history') else -1
+            logger.info(f"[TIMING] Chat {chat_id} | User: {user_name} | History: {history_len} messages | Sending request...")
+            start_time = time.time()
+
             response = chat_session.send_message(contents)
+
+            elapsed = time.time() - start_time
             self.daily_calls += 1
 
+            token_info = ""
             if response.usage_metadata:
                 self.daily_prompt_tokens += response.usage_metadata.prompt_token_count
                 self.daily_response_tokens += response.usage_metadata.candidates_token_count
                 self.daily_total_tokens += response.usage_metadata.total_token_count
+                token_info = f" | Tokens: {response.usage_metadata.prompt_token_count} in / {response.usage_metadata.candidates_token_count} out"
+
+            logger.info(f"[TIMING] Chat {chat_id} | Response in {elapsed:.2f}s{token_info}")
+
+            # Log if it was slow
+            if elapsed > 10:
+                logger.warning(f"[SLOW] Chat {chat_id} took {elapsed:.2f}s! History: {history_len} messages")
 
             bot_text = response.text
             if not bot_text or not bot_text.strip():
@@ -171,7 +180,8 @@ class GeminiHandler:
             return bot_text.strip()
 
         except Exception as e:
-            logger.error(f"Errore generazione risposta da Gemini: {e}")
+            elapsed = time.time() - start_time if 'start_time' in locals() else -1
+            logger.error(f"Errore generazione risposta da Gemini (after {elapsed:.2f}s): {e}")
             return "Scusa, ho avuto un problema tecnico con l'IA."
 
     def get_stats(self):

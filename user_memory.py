@@ -1,5 +1,9 @@
 import os
 import sqlite3
+import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 DB_DIR = "data"
 DB_PATH = os.path.join(DB_DIR, "user_memory.db")
@@ -48,6 +52,8 @@ def save_user_memory(user_id: int, category: str, content: str, group_id: int = 
         content: The actual fact or memory to save (e.g. 'Colore preferito: blu', 'Studia informatica a Padova').
         group_id: Optional unique numeric ID of the group/chat where this memory was learned. Pass this if you are in a group chat.
     """
+    start = time.time()
+    logger.info(f"[TOOL] save_user_memory called | user={user_id} | category={category} | group={group_id}")
     conn = sqlite3.connect(DB_PATH)
     try:
         cursor = conn.cursor()
@@ -56,8 +62,12 @@ def save_user_memory(user_id: int, category: str, content: str, group_id: int = 
             ("user", int(user_id), category.strip(), content.strip(), int(group_id) if group_id is not None else None)
         )
         conn.commit()
+        elapsed = time.time() - start
+        logger.info(f"[TOOL] save_user_memory completed in {elapsed:.2f}s")
         return f"Successfully saved user memory (ID: {cursor.lastrowid}) for user {user_id}."
     except Exception as e:
+        elapsed = time.time() - start
+        logger.error(f"[TOOL] save_user_memory FAILED in {elapsed:.2f}s: {e}")
         return f"Error saving user memory: {e}"
     finally:
         conn.close()
@@ -99,6 +109,8 @@ def save_group_memory(chat_id: int, category: str, content: str) -> str:
         category: The category of the memory (e.g. 'gag', 'dynamic', 'habit', 'preference').
         content: The actual fact, gag, or habit to save (e.g. 'Ogni venerdì si organizza la serata pizza').
     """
+    start = time.time()
+    logger.info(f"[TOOL] save_group_memory called | chat={chat_id} | category={category}")
     conn = sqlite3.connect(DB_PATH)
     try:
         cursor = conn.cursor()
@@ -107,8 +119,12 @@ def save_group_memory(chat_id: int, category: str, content: str) -> str:
             ("group", int(chat_id), category.strip(), content.strip())
         )
         conn.commit()
+        elapsed = time.time() - start
+        logger.info(f"[TOOL] save_group_memory completed in {elapsed:.2f}s")
         return f"Successfully saved group memory (ID: {cursor.lastrowid}) for chat {chat_id}."
     except Exception as e:
+        elapsed = time.time() - start
+        logger.error(f"[TOOL] save_group_memory FAILED in {elapsed:.2f}s: {e}")
         return f"Error saving group memory: {e}"
     finally:
         conn.close()
@@ -151,6 +167,8 @@ def delete_memory(memory_id: int) -> str:
     Args:
         memory_id: The unique numeric ID of the memory to delete.
     """
+    start = time.time()
+    logger.info(f"[TOOL] delete_memory called | id={memory_id}")
     conn = sqlite3.connect(DB_PATH)
     try:
         cursor = conn.cursor()
@@ -158,13 +176,19 @@ def delete_memory(memory_id: int) -> str:
         cursor.execute("SELECT scope, scope_id, content FROM memories WHERE id = ?", (int(memory_id),))
         row = cursor.fetchone()
         if not row:
+            elapsed = time.time() - start
+            logger.info(f"[TOOL] delete_memory completed in {elapsed:.2f}s (not found)")
             return f"Memory with ID {memory_id} not found."
 
         scope, scope_id, content = row
         cursor.execute("DELETE FROM memories WHERE id = ?", (int(memory_id),))
         conn.commit()
+        elapsed = time.time() - start
+        logger.info(f"[TOOL] delete_memory completed in {elapsed:.2f}s")
         return f"Successfully deleted memory ID {memory_id} (Scope: {scope}, Scope ID: {scope_id}, Content: '{content}')."
     except Exception as e:
+        elapsed = time.time() - start
+        logger.error(f"[TOOL] delete_memory FAILED in {elapsed:.2f}s: {e}")
         return f"Error deleting memory: {e}"
     finally:
         conn.close()

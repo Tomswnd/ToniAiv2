@@ -6,13 +6,7 @@ from google.genai import types
 import datetime
 
 from config import GEMINI_API_KEY, DEFAULT_SYSTEM_MESSAGE, TEMPERATURE, MODEL_NAME
-from user_memory import (
-    save_user_memory,
-    get_user_memories,
-    save_group_memory,
-    get_group_memories,
-    delete_memory
-)
+from user_memory import get_user_memories, get_group_memories
 
 logger = logging.getLogger(__name__)
 
@@ -103,12 +97,10 @@ class GeminiHandler:
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
                     temperature=TEMPERATURE,
-                    tools=[
-                        search_web,
-                        save_user_memory,
-                        save_group_memory,
-                        delete_memory
-                    ]
+                    tools=[search_web],
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                        maximum_remote_calls=1
+                    )
                 )
             )
         return self.conversations[chat_id]

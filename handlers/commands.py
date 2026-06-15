@@ -85,7 +85,11 @@ def help_command(message):
 
 @bot.message_handler(commands=['reset'])
 def reset_command(message):
-    """Generate a character summary, save it, optionally notify, then reset the conversation."""
+    """Generate a character summary, save it, optionally notify, then reset the conversation. Admin only."""
+    if str(message.from_user.id) != str(ADMIN_ID):
+        bot.reply_to(message, "Comando disponibile solo per il creatore del bot.")
+        return
+
     chat_id = message.chat.id
 
     if chat_id not in ai_handler.conversations:

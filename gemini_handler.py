@@ -15,7 +15,7 @@ def search_web(query: str) -> str:
     """Searches the web for the given query using DuckDuckGo and returns a summary of the results."""
     start = time.time()
     logger.info(f"[TOOL] search_web called with query: '{query}'")
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
     try:
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=3))

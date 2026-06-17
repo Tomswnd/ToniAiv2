@@ -90,7 +90,14 @@ class GeminiHandler:
             from daily_reset import load_latest_summary
             daily_summary = load_latest_summary(chat_id)
             if daily_summary:
+                # Hard cap to keep system prompt lightweight
+                MAX_SUMMARY_CHARS = 2000
+                if len(daily_summary) > MAX_SUMMARY_CHARS:
+                    daily_summary = daily_summary[:MAX_SUMMARY_CHARS] + "\n[...truncated]"
+                    logger.warning(f"Daily summary for chat {chat_id} truncated from {len(daily_summary)} to {MAX_SUMMARY_CHARS} chars")
                 system_instruction += f"\n\n{daily_summary}\n"
+
+            logger.info(f"System prompt for chat {chat_id}: {len(system_instruction)} chars")
 
             self.conversations[chat_id] = self.client.chats.create(
                 model=self.model_name,

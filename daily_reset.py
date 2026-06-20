@@ -66,11 +66,11 @@ DIFF_PROMPT_TEMPLATE = (
     "al resoconto precedente.\n\n"
     "RESOCONTO PRECEDENTE:\n{previous}\n\n"
     "RESOCONTO ATTUALE:\n{current}\n\n"
-    "Genera un messaggio breve e leggibile per Telegram (usa emoji) con questo formato:\n"
-    "📋 Aggiornamento Memoria Giornaliera\n\n"
-    "🆕 Novità:\n"
+    "Genera un messaggio breve e leggibile per Telegram con questo formato:\n"
+    "Aggiornamento Memoria Giornaliera\n\n"
+    "Novità:\n"
     "- (nuove informazioni scoperte oggi)\n\n"
-    "✏️ Aggiornamenti:\n"
+    "Aggiornamenti:\n"
     "- (informazioni modificate/aggiornate rispetto a ieri)\n\n"
     "Se non ci sono differenze significative, scrivi semplicemente che la memoria è stata "
     "confermata senza variazioni rilevanti."
@@ -131,15 +131,34 @@ def load_latest_summary(chat_id):
 # ---------------------------------------------------------------------------
 # Gemini helpers
 # ---------------------------------------------------------------------------
-def generate_summary(chat_session):
-    """Asks the *existing* chat session to produce a structured summary."""
+def generate_summary_from_log(chat_id, today_log, previous_summary):
+    """Genera un riassunto strutturato partendo dal log giornaliero e dal riassunto precedente.
+
+    Usa una chiamata one-shot a Gemini (non la chat session attiva).
+    """
+    prompt_parts = []
+
+    if previous_summary:
+        prompt_parts.append(f"[RESOCONTO PRECEDENTE DELLA CHAT]:\n{previous_summary}\n")
+
+    if today_log:
+        prompt_parts.append(f"[LOG COMPLETO DELLA GIORNATA DI OGGI]:\n{today_log}\n")
+
+    prompt_parts.append(SUMMARY_PROMPT)
+    full_prompt = "\n\n".join(prompt_parts)
+
     try:
-        response = chat_session.send_message(SUMMARY_PROMPT)
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=full_prompt,
+            config=types.GenerateContentConfig(temperature=0.3),
+        )
         if response and response.text:
             return response.text.strip()
         return None
     except Exception as e:
-        logger.error(f"Error generating summary: {e}")
+        logger.error(f"Error generating summary for chat {chat_id}: {e}")
         return None
 
 
@@ -175,23 +194,32 @@ def generate_diff_report(current_summary, previous_summary):
 # ---------------------------------------------------------------------------
 def reset_single_chat(chat_id, gemini_handler, bot=None, notify=None):
     """
-    Resets a single chat: generate summary → save → optionally notify → clear RAM.
+    Resets a single chat: generate summary from today's log → save → optionally notify → clear RAM.
 
     Returns the generated summary text, or None on failure.
     """
     if notify is None:
         notify = is_notify_enabled()
 
-    chat_session = gemini_handler.conversations.get(chat_id)
-    if not chat_session:
-        return None
+    # Import qui per evitare import circolare
+    from gemini_handler import get_today_log, clear_today_log
 
     # Previous summary (before we overwrite it)
     previous_summary = load_latest_summary(chat_id)
 
-    # Generate new summary from current conversation context
+    # Carica il log completo della giornata
+    today_log = get_today_log(chat_id)
+
+    if not today_log and not previous_summary:
+        logger.info(f"Chat {chat_id}: nessun log giornaliero né riassunto precedente, skip.")
+        # Pulisci la conversazione dalla RAM comunque
+        if chat_id in gemini_handler.conversations:
+            del gemini_handler.conversations[chat_id]
+        return None
+
+    # Generate new summary from today's log + previous summary
     logger.info(f"Generating summary for chat {chat_id}…")
-    summary = generate_summary(chat_session)
+    summary = generate_summary_from_log(chat_id, today_log, previous_summary)
 
     if summary:
         save_summary(chat_id, summary)
@@ -211,8 +239,12 @@ def reset_single_chat(chat_id, gemini_handler, bot=None, notify=None):
     else:
         logger.warning(f"Failed to generate summary for chat {chat_id}")
 
+    # Svuota il log giornaliero
+    clear_today_log(chat_id)
+
     # Clear the conversation from RAM
-    del gemini_handler.conversations[chat_id]
+    if chat_id in gemini_handler.conversations:
+        del gemini_handler.conversations[chat_id]
     logger.info(f"Conversation {chat_id} reset successfully.")
     return summary
 
@@ -222,7 +254,20 @@ def perform_daily_reset(gemini_handler, bot=None):
     Iterates over ALL active conversations and resets each one.
     Called automatically by the scheduler every day.
     """
-    chat_ids = list(gemini_handler.conversations.keys())
+    from gemini_handler import CHAT_LOGS_DIR
+
+    # Raccogli chat_id sia dalle conversazioni attive sia dai log giornalieri su disco
+    chat_ids = set(gemini_handler.conversations.keys())
+
+    # Aggiungi anche chat che hanno log su disco ma non sono attive in RAM
+    if os.path.exists(CHAT_LOGS_DIR):
+        for filename in os.listdir(CHAT_LOGS_DIR):
+            if filename.endswith("_today.txt"):
+                try:
+                    cid = int(filename.replace("_today.txt", ""))
+                    chat_ids.add(cid)
+                except ValueError:
+                    pass
 
     if not chat_ids:
         logger.info("Daily reset: no active conversations to process.")

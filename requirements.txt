@@ -1,5 +1,7 @@
 pyTelegramBotAPI==4.15.4
 google-genai
 pillow
-ddgs
+duckduckgo-search
 schedule
+requests
+beautifulsoup4

@@ -13,5 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code into the container
 COPY . .
 
+# Create data directories with proper permissions
+RUN mkdir -p /app/data/chat_logs /app/data/daily_summaries
+
 # Run main.py when the container launches
 CMD ["python", "main.py"]

@@ -1,10 +1,21 @@
 import logging
 from config import BOT_OWNER, ADMIN_ID
 from handlers import bot, ai_handler
-from user_memory import delete_all_user_memories
+from group_config import get_group_prompt, set_group_prompt, clear_group_prompt
+from gemini_handler import delete_chat_data
 from daily_reset import reset_single_chat, is_notify_enabled, set_notify
 
 logger = logging.getLogger(__name__)
+
+
+def _is_group_admin(message) -> bool:
+    """Check if the sender is the bot admin or a group admin/creator."""
+    if message.from_user.id == ADMIN_ID:
+        return True
+    if message.chat.type in ['group', 'supergroup']:
+        member = bot.get_chat_member(message.chat.id, message.from_user.id)
+        return member.status in ['administrator', 'creator']
+    return False
 
 
 @bot.message_handler(commands=['apistats'])
@@ -71,7 +82,10 @@ def help_command(message):
         "/start - Inizia una conversazione\n"
         "/help - Mostra questa lista\n"
         "/reset - Salva resoconto personaggi e resetta la conversazione\n"
-        "/forget - Dimentica tutte le informazioni memorizzate su di te (DB)\n"
+        "/forget - Cancella i dati della chat corrente\n"
+        "/setprompt <testo> - Imposta un prompt personalizzato per il gruppo (admin)\n"
+        "/viewprompt - Mostra il prompt personalizzato del gruppo\n"
+        "/clearprompt - Rimuovi il prompt personalizzato del gruppo (admin)\n"
         "/togglenotify - Attiva/disattiva notifiche di reset (admin)\n"
         "/apistats - Statistiche di consumo API\n\n"
         f"Sviluppato da {BOT_OWNER} su Telegram."
@@ -127,13 +141,76 @@ def toggle_notify_command(message):
 
 @bot.message_handler(commands=['forget'])
 def forget_command(message):
-    """Delete all stored user memories for the sender."""
-    user_id = message.from_user.id
-    deleted_count = delete_all_user_memories(user_id)
-    if deleted_count > 0:
-        bot.reply_to(
-            message,
-            f"Ho dimenticato tutte le informazioni memorizzate su di te ({deleted_count} ricordi rimossi)."
-        )
+    """Delete all stored chat data for the current chat."""
+    chat_id = message.chat.id
+    delete_chat_data(chat_id)
+    bot.reply_to(message, "🗑️ Dati della chat cancellati con successo.")
+
+
+@bot.message_handler(commands=['setprompt'])
+def setprompt_command(message):
+    """Set a custom system instruction for this group (admin only)."""
+    chat_id = message.chat.id
+
+    # Only available in groups
+    if message.chat.type not in ['group', 'supergroup']:
+        bot.reply_to(message, "Questo comando è disponibile solo nei gruppi.")
+        return
+
+    # Admin check
+    if not _is_group_admin(message):
+        bot.reply_to(message, "Comando disponibile solo per gli admin del gruppo.")
+        return
+
+    # Extract prompt text after the command
+    prompt_text = message.text.split(None, 1)
+    if len(prompt_text) < 2:
+        bot.reply_to(message, "Uso: /setprompt <testo del prompt>")
+        return
+    prompt_text = prompt_text[1].strip()
+
+    set_group_prompt(chat_id, prompt_text)
+
+    # Force reload della conversazione
+    if chat_id in ai_handler.conversations:
+        del ai_handler.conversations[chat_id]
+
+    bot.reply_to(message, "✅ Prompt personalizzato impostato con successo!")
+
+
+@bot.message_handler(commands=['viewprompt'])
+def viewprompt_command(message):
+    """Show the current custom prompt for this group."""
+    chat_id = message.chat.id
+
+    if message.chat.type not in ['group', 'supergroup']:
+        bot.reply_to(message, "Questo comando è disponibile solo nei gruppi.")
+        return
+
+    prompt = get_group_prompt(chat_id)
+    if prompt:
+        bot.reply_to(message, f"📝 Prompt personalizzato attuale:\n\n{prompt}")
     else:
-        bot.reply_to(message, "Non ho alcuna informazione memorizzata su di te.")
+        bot.reply_to(message, "Nessun prompt personalizzato impostato. Viene usato il prompt di default.")
+
+
+@bot.message_handler(commands=['clearprompt'])
+def clearprompt_command(message):
+    """Clear the custom prompt for this group (admin only)."""
+    chat_id = message.chat.id
+
+    if message.chat.type not in ['group', 'supergroup']:
+        bot.reply_to(message, "Questo comando è disponibile solo nei gruppi.")
+        return
+
+    if not _is_group_admin(message):
+        bot.reply_to(message, "Comando disponibile solo per gli admin del gruppo.")
+        return
+
+    clear_group_prompt(chat_id)
+
+    # Force reload della conversazione
+    if chat_id in ai_handler.conversations:
+        del ai_handler.conversations[chat_id]
+
+    bot.reply_to(message, "🗑️ Prompt personalizzato rimosso. Verrà usato il prompt di default.")

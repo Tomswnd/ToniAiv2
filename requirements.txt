@@ -3,3 +3,5 @@ google-genai
 pillow
 duckduckgo-search
 schedule
+requests
+beautifulsoup4

@@ -68,6 +68,12 @@ def handle_photo(message):
     bot.send_chat_action(chat_id, 'typing')
     logger.info(f"Elaborazione foto da chat {chat_id} (Utente: {first_name})")
 
+    # Inizializza context thread-local
+    from gemini_handler import thread_context
+    thread_context.chat_id = chat_id
+    thread_context.reply_to_message_id = message.message_id
+    thread_context.status_message_id = None
+
     try:
         # Download the largest photo version
         photo = message.photo[-1]
@@ -89,11 +95,28 @@ def handle_photo(message):
             logger.warning("Gemini returned an empty response for photo.")
             response = "Scusa, non sono riuscito a elaborare una risposta."
 
-        bot.reply_to(message, response)
+        status_msg_id = getattr(thread_context, 'status_message_id', None)
+        if status_msg_id is not None:
+            bot.edit_message_text(chat_id=chat_id, message_id=status_msg_id, text=response)
+        else:
+            bot.reply_to(message, response)
 
     except Exception as e:
         logger.error(f"Error handling photo: {e}")
-        bot.reply_to(message, "Scusa, sto avendo problemi a elaborare questa immagine.")
+        status_msg_id = getattr(thread_context, 'status_message_id', None)
+        err_msg = "Scusa, sto avendo problemi a elaborare questa immagine."
+        if status_msg_id is not None:
+            try:
+                bot.edit_message_text(chat_id=chat_id, message_id=status_msg_id, text=err_msg)
+            except Exception:
+                bot.reply_to(message, err_msg)
+        else:
+            bot.reply_to(message, err_msg)
+    finally:
+        # Pulisci il context thread-local
+        thread_context.chat_id = None
+        thread_context.reply_to_message_id = None
+        thread_context.status_message_id = None
 
 
 @bot.message_handler(func=lambda message: True, content_types=['text'])
@@ -125,6 +148,12 @@ def handle_message(message):
     bot.send_chat_action(chat_id, 'typing')
     logger.info(f"Elaborazione messaggio da chat {chat_id} (Utente: {first_name})")
 
+    # Inizializza context thread-local
+    from gemini_handler import thread_context
+    thread_context.chat_id = chat_id
+    thread_context.reply_to_message_id = message.message_id
+    thread_context.status_message_id = None
+
     try:
         # Get reply context
         context_text, quoted_image = get_reply_context(message)
@@ -138,9 +167,25 @@ def handle_message(message):
             logger.warning("Gemini returned an empty response.")
             response = "Scusa, non sono riuscito a elaborare una risposta."
 
-        bot.reply_to(message, response)
+        status_msg_id = getattr(thread_context, 'status_message_id', None)
+        if status_msg_id is not None:
+            bot.edit_message_text(chat_id=chat_id, message_id=status_msg_id, text=response)
+        else:
+            bot.reply_to(message, response)
 
     except Exception as e:
         logger.error(f"Error handling message: {e}")
-        bot.reply_to(message,
-                     "Scusa, sto avendo problemi a connettermi all'intelligenza artificiale in questo momento. Riprova più tardi.")
+        status_msg_id = getattr(thread_context, 'status_message_id', None)
+        err_msg = "Scusa, sto avendo problemi a connettermi all'intelligenza artificiale in questo momento. Riprova più tardi."
+        if status_msg_id is not None:
+            try:
+                bot.edit_message_text(chat_id=chat_id, message_id=status_msg_id, text=err_msg)
+            except Exception:
+                bot.reply_to(message, err_msg)
+        else:
+            bot.reply_to(message, err_msg)
+    finally:
+        # Pulisci il context thread-local
+        thread_context.chat_id = None
+        thread_context.reply_to_message_id = None
+        thread_context.status_message_id = None

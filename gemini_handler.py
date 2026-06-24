@@ -63,38 +63,62 @@ def update_tool_status(text: str):
 # Ricerca e Scraping Web
 # ---------------------------------------------------------------------------
 def search_web(query: str) -> str:
-    """Searches the web for the given query using DuckDuckGo and returns a summary of the results."""
+    """Searches the web for the given query using DuckDuckGo. Returns search results AND the full
+    text content of the first relevant result, to ensure accurate and detailed answers."""
     logger.info(f"Esecuzione ricerca web per: '{query}'")
     update_tool_status(f"Ricerca su Internet in corso per: \"{query}\"...")
 
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
     from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
     def _do_search():
         with DDGS() as ddgs:
             return list(ddgs.text(query, max_results=5))
 
+    # Step 1: Esegui la ricerca
+    results = None
     try:
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_do_search)
             results = future.result(timeout=4)
-
-            if not results:
-                return "Nessun risultato trovato sul web."
-
-            output = []
-            for r in results:
-                title = r.get('title', 'Nessun titolo')
-                link = r.get('href', '')
-                body = r.get('body', 'Nessuna descrizione')
-                output.append(f"Titolo: {title}\nLink: {link}\nDescrizione: {body}\n")
-            return "\n---\n".join(output)
     except TimeoutError:
         logger.warning(f"Ricerca web per '{query}' scaduta")
         return "La ricerca web ha impiegato troppo tempo ed è stata annullata."
     except Exception as e:
         logger.error(f"Errore durante la ricerca DuckDuckGo: {e}")
         return f"Impossibile completare la ricerca per errore tecnico: {str(e)}"
+
+    if not results:
+        return "Nessun risultato trovato sul web."
+
+    # Step 2: Costruisci lo snippet dei risultati
+    output = []
+    for r in results:
+        title = r.get('title', 'Nessun titolo')
+        link = r.get('href', '')
+        body = r.get('body', 'Nessuna descrizione')
+        output.append(f"Titolo: {title}\nLink: {link}\nDescrizione: {body}\n")
+    results_text = "\n---\n".join(output)
+
+    # Step 3: Leggi automaticamente la pagina del primo risultato
+    first_url = results[0].get('href', '')
+    if not first_url:
+        logger.warning("Nessun URL disponibile nel primo risultato, restituzione solo snippet.")
+        return results_text
+
+    logger.info(f"Lettura automatica della prima pagina: {first_url}")
+    update_tool_status(f"Lettura della pagina web: {first_url}...")
+    try:
+        page_content = fetch_webpage(first_url)
+        logger.info(f"Pagina {first_url} letta con successo ({len(page_content)} caratteri)")
+    except Exception as e:
+        logger.error(f"Errore nella lettura automatica di {first_url}: {e}")
+        page_content = f"Impossibile leggere la pagina ({str(e)})"
+
+    return (
+        f"=== RISULTATI DI RICERCA ===\n{results_text}\n\n"
+        f"=== CONTENUTO DELLA PAGINA PIU' RILEVANTE ({first_url}) ===\n{page_content}"
+    )
 
 
 def fetch_webpage(url: str) -> str:

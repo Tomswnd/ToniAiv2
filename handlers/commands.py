@@ -193,7 +193,7 @@ def viewprompt_command(message):
 
     prompt = get_group_prompt(chat_id)
     if prompt:
-        bot.reply_to(message, f"📝 Prompt personalizzato attuale:\n\n{prompt}")
+        bot.reply_to(message, f"Prompt personalizzato attuale:\n\n{prompt}")
     else:
         bot.reply_to(message, "Nessun prompt personalizzato impostato. Viene usato il prompt di default.")
 
@@ -217,7 +217,7 @@ def clearprompt_command(message):
     if chat_id in ai_handler.conversations:
         del ai_handler.conversations[chat_id]
 
-    bot.reply_to(message, "🗑️ Prompt personalizzato rimosso. Verrà usato il prompt di default.")
+    bot.reply_to(message, "Prompt personalizzato rimosso. Verrà usato il prompt di default.")
 
 
 # ---------------------------------------------------------------------------

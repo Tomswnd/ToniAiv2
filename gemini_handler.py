@@ -9,10 +9,11 @@ from google import genai
 from google.genai import types
 
 from config import (
-    GEMINI_API_KEY, DEFAULT_SYSTEM_MESSAGE, TEMPERATURE,
+    GEMINI_API_KEY, DEFAULT_SYSTEM_MESSAGE, SYSTEM_MESSAGE_SUFFIX, TEMPERATURE,
     MODEL_NAME, RESPONSE_TIME_THRESHOLD, SHOW_TOOL_USAGE
 )
 from group_config import get_group_prompt
+from chat_tones import get_chat_tone
 
 logger = logging.getLogger(__name__)
 
@@ -271,17 +272,26 @@ class GeminiHandler:
 
     def _build_system_instruction(self, chat_id: int) -> str:
         """Costruisce il prompt di sistema completo per una chat, includendo:
-        1. Prompt personalizzato del gruppo (se presente) oppure prompt default
-        2. Riassunto giornaliero precedente (se presente)
+        1. Tono/personalità della chat (custom o default)
+        2. Prompt personalizzato del gruppo (se presente)
+        3. Riassunto giornaliero precedente (se presente)
         """
-        # 1. Prompt base: personalizzato o default
-        custom_prompt = get_group_prompt(chat_id)
-        if custom_prompt:
-            system_instruction = DEFAULT_SYSTEM_MESSAGE + f"\n\n[ISTRUZIONI PERSONALIZZATE PER QUESTO GRUPPO]:\n{custom_prompt}\n"
+        # 1. Tono: personalizzato o default
+        custom_tone = get_chat_tone(chat_id)
+        tone_text = custom_tone if custom_tone else ""
+
+        # Costruisci il system message: tono + suffisso tecnico
+        if custom_tone:
+            system_instruction = custom_tone + SYSTEM_MESSAGE_SUFFIX
         else:
             system_instruction = DEFAULT_SYSTEM_MESSAGE
 
-        # 2. Riassunto giornaliero precedente
+        # 2. Prompt personalizzato del gruppo
+        custom_prompt = get_group_prompt(chat_id)
+        if custom_prompt:
+            system_instruction += f"\n\n[ISTRUZIONI PERSONALIZZATE PER QUESTO GRUPPO]:\n{custom_prompt}\n"
+
+        # 3. Riassunto giornaliero precedente
         from daily_reset import load_latest_summary
         daily_summary = load_latest_summary(chat_id)
         if daily_summary:

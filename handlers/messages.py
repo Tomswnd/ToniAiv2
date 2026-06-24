@@ -1,7 +1,84 @@
 import logging
+import re
 from handlers import bot, ai_handler
 
 logger = logging.getLogger(__name__)
+
+
+def _md_to_tgv2(text: str) -> str:
+    """Convert AI markdown to Telegram MarkdownV2.
+
+    Supported conversions:
+      **bold**      -> *bold*
+      *italic*      -> _italic_
+      `inline code` -> `inline code`
+      ```block```   -> ```block```
+
+    Uses a single-pass tokenizer (re.finditer) with no placeholders,
+    so there are no escape collision bugs.
+    """
+
+    def esc(s: str) -> str:
+        """Escape all MarkdownV2 special chars in a plain-text segment."""
+        return re.sub(r'([_*\[\]()~`>#+=|{}.!\\-])', r'\\\1', s)
+
+    # One regex that matches ALL formatted tokens in priority order.
+    # Group 1: fenced code block  (```...```)
+    # Group 2: inline code        (`...`)
+    # Group 3: bold content       (**...**)
+    # Group 4: italic content     (*...*)
+    TOKEN = re.compile(
+        r'(```[\w]*\n?.*?```)'
+        r'|(`[^`\n]+`)'
+        r'|\*\*(.+?)\*\*'
+        r'|(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)',
+        re.DOTALL
+    )
+
+    parts = []
+    last = 0
+    for m in TOKEN.finditer(text):
+        # Escape plain text before this token
+        parts.append(esc(text[last:m.start()]))
+
+        if m.group(1) is not None:
+            # Fenced code block — pass through unchanged
+            parts.append(m.group(1))
+        elif m.group(2) is not None:
+            # Inline code — pass through unchanged
+            parts.append(m.group(2))
+        elif m.group(3) is not None:
+            # Bold: **text** -> *escaped_text*
+            parts.append(f'*{esc(m.group(3))}*')
+        elif m.group(4) is not None:
+            # Italic: *text* -> _escaped_text_
+            parts.append(f'_{esc(m.group(4))}_')
+
+        last = m.end()
+
+    # Escape any remaining plain text after the last token
+    parts.append(esc(text[last:]))
+
+    return ''.join(parts)
+
+
+def _send_response(bot_instance, chat_id, message, text):
+    """Invia una risposta con MarkdownV2; fallback a testo semplice se parsing fallisce."""
+    try:
+        converted = _md_to_tgv2(text)
+        bot_instance.reply_to(message, converted, parse_mode='MarkdownV2')
+    except Exception:
+        bot_instance.reply_to(message, text)
+
+
+def _edit_response(bot_instance, chat_id, message_id, text):
+    """Modifica un messaggio con MarkdownV2; fallback a testo semplice se parsing fallisce."""
+    try:
+        converted = _md_to_tgv2(text)
+        bot_instance.edit_message_text(chat_id=chat_id, message_id=message_id,
+                                       text=converted, parse_mode='MarkdownV2')
+    except Exception:
+        bot_instance.edit_message_text(chat_id=chat_id, message_id=message_id, text=text)
 
 
 def get_reply_context(message):
@@ -97,9 +174,9 @@ def handle_photo(message):
 
         status_msg_id = getattr(thread_context, 'status_message_id', None)
         if status_msg_id is not None:
-            bot.edit_message_text(chat_id=chat_id, message_id=status_msg_id, text=response)
+            _edit_response(bot, chat_id, status_msg_id, response)
         else:
-            bot.reply_to(message, response)
+            _send_response(bot, chat_id, message, response)
 
     except Exception as e:
         logger.error(f"Error handling photo: {e}")
@@ -169,9 +246,9 @@ def handle_message(message):
 
         status_msg_id = getattr(thread_context, 'status_message_id', None)
         if status_msg_id is not None:
-            bot.edit_message_text(chat_id=chat_id, message_id=status_msg_id, text=response)
+            _edit_response(bot, chat_id, status_msg_id, response)
         else:
-            bot.reply_to(message, response)
+            _send_response(bot, chat_id, message, response)
 
     except Exception as e:
         logger.error(f"Error handling message: {e}")

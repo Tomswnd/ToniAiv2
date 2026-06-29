@@ -165,7 +165,7 @@ def handle_photo(message):
         prompt_text = context_text + caption_text
 
         # Classic mode
-        response = ai_handler.generate_response(chat_id, prompt_text, first_name, user_id=user_id, image=image)
+        response = ai_handler.generate_response(chat_id, prompt_text, first_name, username=username, user_id=user_id, image=image)
 
         # Failsafe: if Gemini returns empty response
         if not response or not response.strip():
@@ -237,7 +237,7 @@ def handle_message(message):
         prompt_text = context_text + message_text
 
         # Classic mode
-        response = ai_handler.generate_response(chat_id, prompt_text, first_name, user_id=user_id, image=quoted_image)
+        response = ai_handler.generate_response(chat_id, prompt_text, first_name, username=username, user_id=user_id, image=quoted_image)
 
         # Failsafe: if Gemini returns an empty string, don't crash Telegram
         if not response or not response.strip():

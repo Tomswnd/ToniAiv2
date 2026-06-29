@@ -4,7 +4,7 @@ from config import BOT_OWNER, ADMIN_ID, PREDEFINED_TONES
 from handlers import bot, ai_handler
 from group_config import get_group_prompt, set_group_prompt, clear_group_prompt
 from gemini_handler import delete_chat_data
-from daily_reset import reset_single_chat, is_notify_enabled, set_notify
+from daily_reset import reset_single_chat, is_notify_enabled, set_notify, load_latest_summary
 from chat_tones import get_chat_tone, set_chat_tone, clear_chat_tone
 
 logger = logging.getLogger(__name__)
@@ -84,6 +84,7 @@ def help_command(message):
         "/start - Inizia una conversazione\n"
         "/help - Mostra questa lista\n"
         "/reset - Salva resoconto personaggi e resetta la conversazione\n"
+        "/viewsummary - Visualizza l'ultimo resoconto salvato per questa chat\n"
         "/forget - Cancella i dati della chat corrente\n"
         "/tone - Imposta il tono/personalita' del bot\n"
         "/tone reset - Ripristina il tono di default\n"
@@ -128,6 +129,21 @@ def reset_command(message):
         if chat_id in ai_handler.conversations:
             del ai_handler.conversations[chat_id]
         bot.reply_to(message, "🔄 Conversazione resettata (errore durante il salvataggio del resoconto).")
+
+
+@bot.message_handler(commands=['viewsummary'])
+def view_summary_command(message):
+    """Mostra l'ultimo resoconto salvato per questa chat."""
+    chat_id = message.chat.id
+    summary = load_latest_summary(chat_id)
+    if summary:
+        response = f"📋 *Ultimo resoconto salvato per questa chat:*\n\n{summary}"
+        try:
+            bot.reply_to(message, response, parse_mode='Markdown')
+        except Exception:
+            bot.reply_to(message, f"📋 Ultimo resoconto salvato per questa chat:\n\n{summary}")
+    else:
+        bot.reply_to(message, "📋 Non ci sono resoconti salvati per questa chat.")
 
 
 @bot.message_handler(commands=['togglenotify'])

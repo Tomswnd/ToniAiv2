@@ -324,7 +324,7 @@ class GeminiHandler:
             f"(tempo di risposta > {RESPONSE_TIME_THRESHOLD}s)"
         )
 
-    def _prepare_user_content(self, chat_id, message_text, user_name, user_id, image=None) -> list[types.Part]:
+    def _prepare_user_content(self, chat_id, message_text, user_name, username=None, user_id=None, image=None) -> list[types.Part]:
         """Prepara il contenuto del messaggio utente per Gemini."""
         parts = []
 
@@ -340,7 +340,11 @@ class GeminiHandler:
             parts.append(types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
 
         time_context = get_current_time_context()
-        user_info = f"{user_name} (ID: {user_id})" if user_id is not None else user_name
+        if username:
+            usr = username if username.startswith("@") else f"@{username}"
+            user_info = f"{user_name} ({usr}, ID: {user_id})" if user_id is not None else f"{user_name} ({usr})"
+        else:
+            user_info = f"{user_name} (ID: {user_id})" if user_id is not None else user_name
         chat_info = f" nella chat {chat_id}" if chat_id is not None else ""
 
         if message_text:
@@ -350,11 +354,11 @@ class GeminiHandler:
 
         return parts
 
-    def generate_response(self, chat_id, message_text, user_name, user_id=None, image=None):
+    def generate_response(self, chat_id, message_text, user_name, username=None, user_id=None, image=None):
         self._check_daily_reset()
 
         # Prepara il contenuto utente
-        user_parts = self._prepare_user_content(chat_id, message_text, user_name, user_id, image)
+        user_parts = self._prepare_user_content(chat_id, message_text, user_name, username=username, user_id=user_id, image=image)
         if not user_parts:
             return "Non so come rispondere a questo."
 
@@ -364,7 +368,12 @@ class GeminiHandler:
 
         # Log nel file giornaliero
         log_text = message_text or "[immagine]"
-        log_message_to_file(chat_id, user_name, log_text)
+        if username:
+            usr = username if username.startswith("@") else f"@{username}"
+            log_sender = f"{user_name} ({usr})"
+        else:
+            log_sender = user_name
+        log_message_to_file(chat_id, log_sender, log_text)
 
         # Costruisci il prompt di sistema
         system_instruction = self._build_system_instruction(chat_id)
